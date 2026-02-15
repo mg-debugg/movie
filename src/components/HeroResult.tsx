@@ -7,7 +7,7 @@ import { ProvidersRow } from './ProvidersRow';
 export function HeroResult({
   movie,
   region,
-  mainCopy = '지금 한국 주요 OTT에서 바로 볼 수 있는 작품을 찾아보세요.',
+  mainCopy = '지금 한국 주요 OTT에서 바로 볼수있는 작품을 찾아보세요.',
 }: {
   movie: MovieSummary;
   region: RegionProviders;
@@ -70,4 +70,3 @@ export function HeroResult({
     </section>
   );
 }
-

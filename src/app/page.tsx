@@ -159,7 +159,7 @@ export default function Home() {
       <main className="mx-auto max-w-6xl px-4 pb-20 pt-8 sm:px-6">
         <div className="mb-8">
           <h1 className="text-balance text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-            지금 한국 주요 OTT에서 바로 볼 수 있는 작품을 찾아보세요.
+            지금 한국 주요 OTT에서 바로 볼수있는 작품을 찾아보세요.
           </h1>
           <p className="mt-2 text-sm leading-6 text-white/65">
             제공처 정보는 데이터 소스에 따라 일부 누락될 수 있어요.
