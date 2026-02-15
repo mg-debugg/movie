@@ -133,3 +133,18 @@ git push -u origin main
 - 레이트리밋/캐시는 in-memory라서 Vercel 서버리스 환경에서는 인스턴스마다 상태가 달라질 수 있습니다(MVP용 간단 구현).
 - 제공처 정보의 정확도/완전성은 TMDB Watch Providers 데이터 품질에 의존합니다.
 
+## 체크리스트 (내가 한 일 / 사용자가 할 일)
+
+내가 한 일:
+
+1. `npm run lint`, `npm run build`, `npm run test:providers` 통과 상태로 정리
+2. `.gitignore`에 배포/보안/빌드 산출물 무시 규칙 추가 (`.env.local` 등 민감정보 커밋 방지)
+3. 서버(API Route)에서만 TMDB 키 사용하도록 구조 유지 (클라이언트 노출 방지)
+4. README에 로컬 실행, GitHub push, Vercel Import/Env Vars 안내 추가
+
+사용자가 할 일:
+
+1. GitHub에서 새 레포 생성 후 URL 복사
+2. 아래 명령으로 origin 설정 + push
+3. Vercel에서 1회 Import 후 Env Vars에 `TMDB_API_KEY` 설정
+4. 이후부터는 `git push`만으로 자동 배포 확인
