@@ -1,85 +1,58 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
-import { EmptyState } from '@/components/EmptyState';
-import { Header } from '@/components/Header';
-import { HeroResult } from '@/components/HeroResult';
-import { MovieGrid } from '@/components/MovieGrid';
-import { SkeletonCard } from '@/components/SkeletonCard';
-import type { MovieProvidersResponse } from '@/lib/types';
+import { ContentCard } from '@/components/ContentCard';
+import { Header, type Suggestion } from '@/components/Header';
+import type { Content } from '@/lib/types';
 
-type Suggestion = { id: number; title: string; year?: number; posterUrl?: string };
+type SearchResponse = { query: string; results: Content[] };
+type TrendingResponse = { type: 'movie' | 'tv'; results: Content[] };
 
-const LOCAL_TTL_MS = 10 * 60 * 1000;
-
-function localCacheKey(query: string): string {
-  return `movieott:v2:${query.trim().toLowerCase()}`;
-}
-
-function tryReadLocalCache(query: string): MovieProvidersResponse | null {
-  try {
-    const raw = localStorage.getItem(localCacheKey(query));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { at: number; data: MovieProvidersResponse };
-    if (!parsed?.at || !parsed?.data) return null;
-    if (Date.now() - parsed.at > LOCAL_TTL_MS) return null;
-    return parsed.data;
-  } catch {
-    return null;
-  }
-}
-
-function writeLocalCache(query: string, data: MovieProvidersResponse): void {
-  try {
-    localStorage.setItem(localCacheKey(query), JSON.stringify({ at: Date.now(), data }));
-  } catch {
-    // ignore
-  }
+function typeLabel(t: 'all' | 'movie' | 'tv'): string {
+  if (t === 'all') return '전체';
+  return t === 'movie' ? '영화' : '드라마';
 }
 
 export default function Home() {
+  const router = useRouter();
+
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
-  const [data, setData] = useState<MovieProvidersResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [results, setResults] = useState<Content[] | null>(null);
+  const [lastQuery, setLastQuery] = useState<string | null>(null);
 
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const suggestAbort = useRef<AbortController | null>(null);
 
-  const [showFallback, setShowFallback] = useState(false);
+  const [typeFilter, setTypeFilter] = useState<'all' | 'movie' | 'tv'>('all');
 
-  async function runSearch(opts: { query?: string; id?: number }) {
-    setError(null);
-    setShowFallback(false);
+  const [trendingMovies, setTrendingMovies] = useState<Content[] | null>(null);
+  const [trendingTv, setTrendingTv] = useState<Content[] | null>(null);
 
-    const displayQuery = opts.query ?? query;
-    if (!opts.id && !displayQuery.trim()) return;
-
-    if (displayQuery && !opts.id) {
-      const cached = tryReadLocalCache(displayQuery);
-      if (cached) {
-        setData(cached);
-        return;
-      }
-    }
+  async function runSearch(q: string) {
+    const trimmed = q.trim();
+    if (!trimmed) return;
 
     setBusy(true);
-    try {
-      const u = new URL('/api/movie', window.location.origin);
-      if (opts.id) u.searchParams.set('id', String(opts.id));
-      else u.searchParams.set('query', displayQuery);
+    setError(null);
+    setLastQuery(trimmed);
+    setResults(null);
 
+    try {
+      const u = new URL('/api/search', window.location.origin);
+      u.searchParams.set('query', trimmed);
       const res = await fetch(u.toString());
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string; message?: string } | null;
-        if (res.status === 404) throw new Error('검색 결과가 없습니다.');
         if (body?.error === 'RATE_LIMITED') throw new Error('요청이 너무 많습니다. 잠시 후 다시 시도해주세요.');
-        throw new Error(body?.message || 'API 오류가 발생했습니다.');
+        throw new Error(body?.message || '검색 중 오류가 발생했습니다.');
       }
-      const json = (await res.json()) as MovieProvidersResponse;
-      setData(json);
-      if (displayQuery && !opts.id) writeLocalCache(displayQuery, json);
+      const json = (await res.json()) as SearchResponse;
+      setResults(json.results);
     } catch (e) {
       if (e instanceof Error) setError(e.message);
       else setError('네트워크 오류가 발생했습니다.');
@@ -110,31 +83,49 @@ export default function Home() {
       } catch {
         // ignore
       }
-    }, 300);
+    }, 250);
 
     return () => window.clearTimeout(t);
   }, [query]);
 
-  const heroTitle = useMemo(() => {
-    if (!data) return '';
-    return `${data.movie.title}${data.movie.year ? ` (${data.movie.year})` : ''}`;
-  }, [data]);
+  useEffect(() => {
+    let alive = true;
+    const ac = new AbortController();
 
-  const hasAnyProvider = useMemo(() => {
-    if (!data) return false;
-    const kr = data.kr;
-    const paidCount = kr.paidProviders.rent.length + kr.paidProviders.buy.length;
-    return kr.primaryProviders.length + paidCount > 0;
-  }, [data]);
+    (async () => {
+      try {
+        const [m, t] = await Promise.all([
+          fetch(new URL('/api/trending?type=movie', window.location.origin).toString(), { signal: ac.signal }),
+          fetch(new URL('/api/trending?type=tv', window.location.origin).toString(), { signal: ac.signal }),
+        ]);
+        if (!alive) return;
+        if (m.ok) {
+          const json = (await m.json()) as TrendingResponse;
+          setTrendingMovies(json.results);
+        }
+        if (t.ok) {
+          const json = (await t.json()) as TrendingResponse;
+          setTrendingTv(json.results);
+        }
+      } catch {
+        // ignore
+      }
+    })();
 
-  const showEmpty =
-    data?.kr.exists === true &&
-    data.kr.primaryProviders.length === 0 &&
-    data.kr.showPaid === true &&
-    data.kr.paidProviders.rent.length === 0 &&
-    data.kr.paidProviders.buy.length === 0;
+    return () => {
+      alive = false;
+      ac.abort();
+    };
+  }, []);
 
-  const showFallbackToggle = Boolean(data?.fallback) && data?.kr.exists === false;
+  const filteredResults = useMemo(() => {
+    const arr = results ?? [];
+    if (typeFilter === 'all') return arr;
+    return arr.filter((x) => x.media_type === typeFilter);
+  }, [results, typeFilter]);
+
+  const showSearch = results !== null || busy || error || lastQuery !== null;
+  const showTrending = !showSearch;
 
   return (
     <div className="min-h-screen bg-[#0b0b0f] text-white">
@@ -144,25 +135,23 @@ export default function Home() {
       </div>
 
       <Header
-        siteName="화원시네마"
         query={query}
         busy={busy}
         suggestions={suggestions}
         onQueryChange={(v) => setQuery(v)}
-        onSubmit={() => void runSearch({ query })}
-        onPickSuggestion={(id, title) => {
-          setQuery(title);
-          void runSearch({ id, query: title });
+        onSubmit={() => void runSearch(query)}
+        onPickSuggestion={(s) => {
+          router.push(s.media_type === 'movie' ? `/movie/${s.id}` : `/tv/${s.id}`);
         }}
       />
 
       <main className="mx-auto max-w-6xl px-4 pb-20 pt-8 sm:px-6">
         <div className="mb-8">
           <h1 className="text-balance text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-            지금 한국 주요 OTT에서 바로 볼수있는 작품을 찾아보세요.
+            영화와 드라마를 검색하고, 한국 OTT 제공처를 확인하세요
           </h1>
           <p className="mt-2 text-sm leading-6 text-white/65">
-            제공처 정보는 데이터 소스에 따라 일부 누락될 수 있어요.
+            TMDB 검색 결과를 기반으로 합니다. 제공처 정보는 TMDB Watch Providers 품질에 따라 달라질 수 있습니다.
           </p>
         </div>
 
@@ -172,80 +161,69 @@ export default function Home() {
           </div>
         ) : null}
 
-        {busy ? (
-          <div className="space-y-6">
-            <div className="h-[260px] animate-pulse rounded-3xl border border-white/10 bg-white/[0.03]" />
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
-              {Array.from({ length: 12 }).map((_, i) => (
-                <SkeletonCard key={i} />
-              ))}
-            </div>
+        {busy ? <div className="h-[260px] animate-pulse rounded-3xl border border-white/10 bg-white/[0.03]" /> : null}
+
+        {showTrending ? (
+          <div className="space-y-10">
+            <section className="space-y-4">
+              <h2 className="text-sm font-semibold text-white/85">오늘 인기 영화 TOP 10</h2>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+                {(trendingMovies ?? []).map((c) => (
+                  <ContentCard key={`movie:${c.id}`} item={c} />
+                ))}
+              </div>
+            </section>
+
+            <section className="space-y-4">
+              <h2 className="text-sm font-semibold text-white/85">오늘 인기 드라마 TOP 10</h2>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+                {(trendingTv ?? []).map((c) => (
+                  <ContentCard key={`tv:${c.id}`} item={c} />
+                ))}
+              </div>
+            </section>
           </div>
         ) : null}
 
-        {!busy && data ? (
-          <div className="space-y-10">
-            <HeroResult movie={data.movie} region={data.kr} />
-
-            {showEmpty ? (
-              <EmptyState />
-            ) : (
-              <MovieGrid
-                posterUrl={data.movie.posterUrl}
-                movieTitle={heroTitle}
-                sections={
-                  data.kr.primaryProviders.length > 0
-                    ? [{ providers: data.kr.primaryProviders }]
-                    : [
-                        { title: data.kr.paidProviders.rent.length ? '대여' : undefined, badge: 'rent', providers: data.kr.paidProviders.rent },
-                        { title: data.kr.paidProviders.buy.length ? '구매' : undefined, badge: 'buy', providers: data.kr.paidProviders.buy },
-                      ]
-                }
-              />
-            )}
-
-            {showFallbackToggle ? (
-              <div className="space-y-3">
-                <button
-                  type="button"
-                  onClick={() => setShowFallback((v) => !v)}
-                  className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-white/80 shadow-sm hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/60"
-                >
-                  {showFallback ? '대체 결과 숨기기' : '대체 결과 보기'}
-                </button>
-
-                {showFallback && data.fallback ? (
-                  <div className="space-y-4">
-                    <div className="text-sm font-semibold text-white/75">대체 결과 ({data.fallback.country})</div>
-                    <MovieGrid
-                      posterUrl={data.movie.posterUrl}
-                      movieTitle={heroTitle}
-                      sections={
-                        data.fallback.primaryProviders.length > 0
-                          ? [{ providers: data.fallback.primaryProviders }]
-                          : [
-                              {
-                                title: data.fallback.paidProviders.rent.length ? '대여' : undefined,
-                                badge: 'rent',
-                                providers: data.fallback.paidProviders.rent,
-                              },
-                              {
-                                title: data.fallback.paidProviders.buy.length ? '구매' : undefined,
-                                badge: 'buy',
-                                providers: data.fallback.paidProviders.buy,
-                              },
-                            ]
-                      }
-                    />
-                  </div>
-                ) : null}
+        {!busy && results !== null ? (
+          <div className="space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-sm font-semibold text-white/85">
+                검색 결과{lastQuery ? <span className="text-white/50">{`: "${lastQuery}"`}</span> : null}
               </div>
-            ) : null}
+              <div className="flex flex-wrap gap-2">
+                {(['all', 'movie', 'tv'] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setTypeFilter(t)}
+                    className={
+                      t === typeFilter
+                        ? 'rounded-full border border-rose-500/40 bg-rose-500/15 px-3 py-1 text-xs font-semibold text-rose-100'
+                        : 'rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-semibold text-white/75 hover:bg-white/[0.06]'
+                    }
+                  >
+                    {typeLabel(t)}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-            {!hasAnyProvider && data.kr.exists ? <EmptyState /> : null}
+            {filteredResults.length ? (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+                {filteredResults.map((c) => (
+                  <ContentCard key={`${c.media_type}:${c.id}`} item={c} />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-6 text-sm text-white/70">
+                검색 결과가 없습니다.
+              </div>
+            )}
           </div>
         ) : null}
       </main>
     </div>
   );
 }
+

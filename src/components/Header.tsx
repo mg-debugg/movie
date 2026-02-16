@@ -1,7 +1,11 @@
 import Image from 'next/image';
 import { useEffect, useRef, useState } from 'react';
 
-type Suggestion = { id: number; title: string; year?: number; posterUrl?: string };
+export type Suggestion = { id: number; title: string; year?: number; posterUrl?: string; media_type: 'movie' | 'tv' };
+
+function mediaTypeLabel(mt: Suggestion['media_type']): string {
+  return mt === 'movie' ? '영화' : '드라마';
+}
 
 function BrandMark() {
   return (
@@ -13,25 +17,15 @@ function BrandMark() {
           strokeWidth="1.6"
           className="text-white/85"
         />
-        <path
-          d="M9 5v14M15 5v14"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          className="text-white/35"
-        />
-        <path
-          d="M5 9h14M5 15h14"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          className="text-white/35"
-        />
+        <path d="M9 5v14M15 5v14" stroke="currentColor" strokeWidth="1.6" className="text-white/35" />
+        <path d="M5 9h14M5 15h14" stroke="currentColor" strokeWidth="1.6" className="text-white/35" />
       </svg>
     </div>
   );
 }
 
 export function Header({
-  siteName = '화원시네마',
+  siteName = '무비/드라마 OTT',
   query,
   busy,
   suggestions,
@@ -45,7 +39,7 @@ export function Header({
   suggestions: Suggestion[];
   onQueryChange: (v: string) => void;
   onSubmit: () => void;
-  onPickSuggestion: (id: number, title: string) => void;
+  onPickSuggestion: (s: Suggestion) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [openInfo, setOpenInfo] = useState(false);
@@ -71,7 +65,7 @@ export function Header({
           <BrandMark />
           <div className="hidden sm:block">
             <div className="text-sm font-semibold text-white">{siteName}</div>
-            <div className="text-xs text-white/55">KR OTT Finder</div>
+            <div className="text-xs text-white/55">TMDB Search (KR)</div>
           </div>
         </div>
 
@@ -88,7 +82,7 @@ export function Header({
               value={query}
               onChange={(e) => onQueryChange(e.target.value)}
               onFocus={() => setOpen(true)}
-              placeholder="작품 제목을 검색하세요"
+              placeholder="영화/드라마 제목을 검색하세요"
               className="h-11 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 pr-24 text-sm text-white placeholder:text-white/40 shadow-sm outline-none transition focus:border-white/20 focus:ring-2 focus:ring-rose-500/60"
             />
             <button
@@ -96,7 +90,7 @@ export function Header({
               disabled={busy}
               className="absolute right-1 top-1 inline-flex h-9 items-center justify-center rounded-xl bg-rose-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-500 disabled:opacity-60"
             >
-              {busy ? '검색 중…' : '검색'}
+              {busy ? '검색 중' : '검색'}
             </button>
           </form>
 
@@ -104,12 +98,12 @@ export function Header({
             <div className="absolute left-0 right-0 mt-2 overflow-hidden rounded-2xl border border-white/10 bg-[#0f0f16] shadow-[0_30px_120px_-60px_rgba(0,0,0,0.9)]">
               {suggestions.map((s) => (
                 <button
-                  key={s.id}
+                  key={`${s.media_type}:${s.id}`}
                   type="button"
                   className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/60"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => {
-                    onPickSuggestion(s.id, s.title);
+                    onPickSuggestion(s);
                     setOpen(false);
                   }}
                 >
@@ -121,8 +115,9 @@ export function Header({
                       {s.title}
                       {s.year ? <span className="text-white/45">{` (${s.year})`}</span> : null}
                     </span>
+                    <span className="mt-0.5 block text-xs font-semibold text-white/45">{mediaTypeLabel(s.media_type)}</span>
                   </span>
-                  <span className="text-xs text-white/40">선택</span>
+                  <span className="text-xs text-white/40">이동</span>
                 </button>
               ))}
             </div>
@@ -137,26 +132,9 @@ export function Header({
             aria-label="정보"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path
-                d="M12 17v-6"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                className="text-white/85"
-              />
-              <path
-                d="M12 8h.01"
-                stroke="currentColor"
-                strokeWidth="3"
-                strokeLinecap="round"
-                className="text-white/85"
-              />
-              <path
-                d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                className="text-white/35"
-              />
+              <path d="M12 17v-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className="text-white/85" />
+              <path d="M12 8h.01" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="text-white/85" />
+              <path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" stroke="currentColor" strokeWidth="1.6" className="text-white/35" />
             </svg>
           </button>
 
@@ -164,9 +142,9 @@ export function Header({
             <div className="absolute right-0 top-12 w-64 overflow-hidden rounded-2xl border border-white/10 bg-[#0f0f16] p-4 text-sm text-white/75 shadow-[0_30px_120px_-60px_rgba(0,0,0,0.9)]">
               <div className="text-sm font-semibold text-white">안내</div>
               <div className="mt-2 text-xs leading-5 text-white/65">
-                제공처 정보는 데이터 소스에 따라 일부 누락될 수 있어요.
+                검색은 TMDB <code className="text-white/75">/search/multi</code>를 사용하며, 인물(person) 결과는 제외합니다.
               </div>
-              <div className="mt-3 text-xs text-white/55">키보드: Tab 이동, Enter 검색</div>
+              <div className="mt-3 text-xs text-white/55">Enter: 검색, 추천 클릭: 상세로 이동</div>
             </div>
           ) : null}
         </div>

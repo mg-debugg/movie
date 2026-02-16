@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { FixedWindowRateLimiter, TtlCache } from '@/lib/cache';
-import { hasTmdbKey, tmdbPosterUrl } from '@/lib/api/_client';
+import { hasTmdbKey } from '@/lib/api/_client';
 import { searchMulti } from '@/lib/api/search';
 
 import { getClientIp } from '../_shared';
@@ -35,34 +35,22 @@ export async function GET(req: Request) {
   }
 
   const q = parsed.data.query;
-  const cacheKey = `suggest:v2:${q.toLowerCase()}`;
+  const cacheKey = `search:v1:${q.toLowerCase()}`;
   const cached = cache.get(cacheKey);
   if (cached) return NextResponse.json(cached);
 
   if (!hasTmdbKey() || process.env.USE_MOCK === '1') {
-    const mock = [
-      { id: 496243, title: '기생충', year: 2019, posterUrl: undefined, media_type: 'movie' as const },
-      { id: 11216, title: '올드보이', year: 2003, posterUrl: undefined, media_type: 'movie' as const },
-      { id: 372058, title: '너의 이름은.', year: 2016, posterUrl: undefined, media_type: 'movie' as const },
-    ].filter((m) => m.title.includes(q));
-    cache.set(cacheKey, mock.slice(0, 5));
-    return NextResponse.json(mock.slice(0, 5));
+    const mock = { query: q, results: [] };
+    cache.set(cacheKey, mock);
+    return NextResponse.json(mock);
   }
 
   try {
     const ko = await searchMulti({ query: q, language: 'ko-KR' });
     const results = ko.length ? ko : await searchMulti({ query: q, language: 'en-US' });
-
-    const top5 = results.slice(0, 5).map((c) => ({
-      id: c.id,
-      media_type: c.media_type,
-      title: c.title,
-      year: Number((c.media_type === 'movie' ? c.release_date : c.first_air_date)?.slice(0, 4)) || undefined,
-      posterUrl: tmdbPosterUrl(c.poster_path, 'w185'),
-    }));
-
-    cache.set(cacheKey, top5);
-    return NextResponse.json(top5);
+    const payload = { query: q, results };
+    cache.set(cacheKey, payload);
+    return NextResponse.json(payload);
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Unknown error';
     return NextResponse.json({ error: 'API_ERROR', message: msg }, { status: 502 });

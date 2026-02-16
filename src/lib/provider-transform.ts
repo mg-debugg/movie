@@ -1,6 +1,6 @@
 import type { PaidProviders, ProviderView, RegionProviders } from './types';
-import type { TmdbCountryProviders, TmdbProvider } from './tmdb';
-import { tmdbLogoUrl } from './tmdb';
+import type { TmdbCountryProviders, TmdbProvider } from './api/providers';
+import { tmdbLogoUrl } from './api/_client';
 import { matchProvider, sortProviders } from './provider-config';
 
 function dedupByKey(arr: ProviderView[]): ProviderView[] {

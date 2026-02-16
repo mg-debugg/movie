@@ -5,6 +5,16 @@ export type MovieSummary = {
   posterUrl?: string;
 };
 
+export interface Content {
+  id: number;
+  title: string;
+  media_type: 'movie' | 'tv';
+  poster_path: string;
+  overview: string;
+  release_date?: string;
+  first_air_date?: string;
+}
+
 export type ProviderView = {
   key: string; // stable canonical key (for React keys + dedupe)
   name: string;
@@ -39,4 +49,3 @@ export type MovieProvidersResponse = {
   usedMock: boolean;
   fromCache: boolean;
 };
-

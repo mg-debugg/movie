@@ -5,14 +5,10 @@ import { FixedWindowRateLimiter, TtlCache } from '@/lib/cache';
 import { getMockProviders } from '@/lib/mock';
 import { buildRegionProviders } from '@/lib/provider-transform';
 import type { MovieProvidersResponse } from '@/lib/types';
-import {
-  getMovie,
-  getWatchProviders,
-  hasTmdbKey,
-  releaseYear,
-  searchMovies,
-  tmdbPosterUrl,
-} from '@/lib/tmdb';
+import { hasTmdbKey, releaseYear, tmdbPosterUrl } from '@/lib/api/_client';
+import { getContentDetail } from '@/lib/api/detail';
+import { getWatchProviders } from '@/lib/api/providers';
+import { searchMulti } from '@/lib/api/search';
 
 import { getClientIp } from '../_shared';
 
@@ -29,17 +25,17 @@ async function handleTmdb(params: { query?: string; id?: number }): Promise<Movi
   const usedMock = !hasTmdbKey() || process.env.USE_MOCK === '1';
   if (usedMock) return getMockProviders(params.query ?? String(params.id ?? ''));
 
-  // Resolve movie id
+  // Resolve movie id from multi-search (filtering out tv/person).
   let movieId = params.id;
   const query = params.query?.trim();
   if (!movieId) {
     if (!query) throw new Error('query is required when id is not provided');
-    const krResults = await searchMovies({ query, language: 'ko-KR', region: 'KR' });
-    const fallbackResults = krResults.length
-      ? krResults
-      : await searchMovies({ query, language: 'en-US', region: 'US' });
-    const top = fallbackResults[0];
-    if (!top) {
+
+    const ko = await searchMulti({ query, language: 'ko-KR' });
+    const base = ko.length ? ko : await searchMulti({ query, language: 'en-US' });
+    const topMovie = base.find((x) => x.media_type === 'movie');
+
+    if (!topMovie) {
       return {
         query,
         movie: { id: 0, title: query },
@@ -55,23 +51,25 @@ async function handleTmdb(params: { query?: string; id?: number }): Promise<Movi
         fromCache: false,
       };
     }
-    movieId = top.id;
+
+    movieId = topMovie.id;
   }
 
-  const [movieKo, providers] = await Promise.all([getMovie(movieId, 'ko-KR'), getWatchProviders(movieId)]);
+  const [content, providers] = await Promise.all([
+    getContentDetail({ media_type: 'movie', id: movieId, language: 'ko-KR' }),
+    getWatchProviders({ media_type: 'movie', id: movieId }),
+  ]);
+
   const movie = {
-    id: movieKo.id,
-    title: movieKo.title,
-    year: releaseYear(movieKo.release_date),
-    posterUrl: tmdbPosterUrl(movieKo.poster_path),
+    id: content.id,
+    title: content.title,
+    year: releaseYear(content.release_date ?? null),
+    posterUrl: tmdbPosterUrl(content.poster_path),
   };
 
   const krEntry = providers.results['KR'];
   const usEntry = providers.results['US'];
 
-  // Data extraction rules:
-  // 1) Prefer KR. If KR exists, use KR only.
-  // 2) If KR missing, return KR 없음 상태 + optional folded fallback (US).
   const kr = buildRegionProviders('KR', krEntry);
   const fallback = !krEntry && usEntry ? buildRegionProviders('US', usEntry) : undefined;
 
