@@ -25,7 +25,7 @@ function BrandMark() {
 }
 
 export function Header({
-  siteName = '무비/드라마 OTT',
+  siteName = '화원시네마 OTT',
   query,
   busy,
   suggestions,
