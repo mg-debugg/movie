@@ -13,6 +13,9 @@ export interface Content {
   overview: string;
   release_date?: string;
   first_air_date?: string;
+  // TV-only (best-effort; present on some TMDB endpoints like trending).
+  origin_country?: string[];
+  original_language?: string;
 }
 
 export type ProviderView = {

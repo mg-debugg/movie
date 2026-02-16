@@ -8,7 +8,12 @@ import { Header, type Suggestion } from '@/components/Header';
 import type { Content } from '@/lib/types';
 
 type SearchResponse = { query: string; results: Content[] };
-type TrendingResponse = { type: 'movie' | 'tv'; results: Content[] };
+type HomeResponse = {
+  ottMovies: Content[];
+  theaterMovies: Content[];
+  krTv: Content[];
+  globalTv: Content[];
+};
 
 function typeLabel(t: 'all' | 'movie' | 'tv'): string {
   if (t === 'all') return '전체';
@@ -30,8 +35,10 @@ export default function Home() {
 
   const [typeFilter, setTypeFilter] = useState<'all' | 'movie' | 'tv'>('all');
 
-  const [trendingMovies, setTrendingMovies] = useState<Content[] | null>(null);
-  const [trendingTv, setTrendingTv] = useState<Content[] | null>(null);
+  const [ottMovies, setOttMovies] = useState<Content[] | null>(null);
+  const [krTv, setKrTv] = useState<Content[] | null>(null);
+  const [globalTv, setGlobalTv] = useState<Content[] | null>(null);
+  const [theaterMovies, setTheaterMovies] = useState<Content[] | null>(null);
 
   async function runSearch(q: string) {
     const trimmed = q.trim();
@@ -94,19 +101,14 @@ export default function Home() {
 
     (async () => {
       try {
-        const [m, t] = await Promise.all([
-          fetch(new URL('/api/trending?type=movie', window.location.origin).toString(), { signal: ac.signal }),
-          fetch(new URL('/api/trending?type=tv', window.location.origin).toString(), { signal: ac.signal }),
-        ]);
+        const res = await fetch(new URL('/api/home', window.location.origin).toString(), { signal: ac.signal });
         if (!alive) return;
-        if (m.ok) {
-          const json = (await m.json()) as TrendingResponse;
-          setTrendingMovies(json.results);
-        }
-        if (t.ok) {
-          const json = (await t.json()) as TrendingResponse;
-          setTrendingTv(json.results);
-        }
+        if (!res.ok) return;
+        const json = (await res.json()) as HomeResponse;
+        setOttMovies(json.ottMovies);
+        setKrTv(json.krTv);
+        setGlobalTv(json.globalTv);
+        setTheaterMovies(json.theaterMovies);
       } catch {
         // ignore
       }
@@ -148,11 +150,10 @@ export default function Home() {
       <main className="mx-auto max-w-6xl px-4 pb-20 pt-8 sm:px-6">
         <div className="mb-8">
           <h1 className="text-balance text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-            영화와 드라마를 검색하고, 한국 OTT 제공처를 확인하세요
+            보고 싶은 작품, <br className="md:hidden" />
+            어느 OTT에 있는지 궁금하다면?
           </h1>
-          <p className="mt-2 text-sm leading-6 text-white/65">
-            TMDB 검색 결과를 기반으로 합니다. 제공처 정보는 TMDB Watch Providers 품질에 따라 달라질 수 있습니다.
-          </p>
+          
         </div>
 
         {error ? (
@@ -166,19 +167,37 @@ export default function Home() {
         {showTrending ? (
           <div className="space-y-10">
             <section className="space-y-4">
-              <h2 className="text-sm font-semibold text-white/85">오늘 인기 영화 TOP 10</h2>
+              <h2 className="text-sm font-semibold text-white/85">OTT 영화</h2>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
-                {(trendingMovies ?? []).map((c) => (
+                {(ottMovies ?? []).map((c) => (
                   <ContentCard key={`movie:${c.id}`} item={c} />
                 ))}
               </div>
             </section>
 
             <section className="space-y-4">
-              <h2 className="text-sm font-semibold text-white/85">오늘 인기 드라마 TOP 10</h2>
+              <h2 className="text-sm font-semibold text-white/85">국내 드라마/예능</h2>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
-                {(trendingTv ?? []).map((c) => (
+                {(krTv ?? []).map((c) => (
                   <ContentCard key={`tv:${c.id}`} item={c} />
+                ))}
+              </div>
+            </section>
+
+            <section className="space-y-4">
+              <h2 className="text-sm font-semibold text-white/85">전체 드라마/예능</h2>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+                {(globalTv ?? []).map((c) => (
+                  <ContentCard key={`tv:global:${c.id}`} item={c} />
+                ))}
+              </div>
+            </section>
+
+            <section className="space-y-4">
+              <h2 className="text-sm font-semibold text-white/85">극장 영화</h2>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+                {(theaterMovies ?? []).map((c) => (
+                  <ContentCard key={`movie:theater:${c.id}`} item={c} />
                 ))}
               </div>
             </section>
@@ -226,4 +245,3 @@ export default function Home() {
     </div>
   );
 }
-

@@ -81,6 +81,10 @@ const tmdbTrendingSchema = z.object({
         // tv
         name: z.string().optional().nullable(),
         first_air_date: z.string().optional().nullable(),
+
+        // tv (optional fields in some endpoints like trending)
+        origin_country: z.array(z.string()).optional().nullable(),
+        original_language: z.string().optional().nullable(),
       })
       .passthrough(),
   ),
@@ -90,12 +94,14 @@ export async function getTrending(opts: {
   media_type: 'movie' | 'tv';
   time_window?: 'day' | 'week';
   language: string;
+  limit?: number;
 }): Promise<Content[]> {
   const u = new URL(tmdbUrl(`/trending/${opts.media_type}/${opts.time_window ?? 'day'}`));
   u.searchParams.set('language', opts.language);
 
   const data = await tmdbGet(u.toString(), tmdbTrendingSchema);
   const mt = opts.media_type;
+  const limit = Math.max(1, opts.limit ?? 10);
 
   return data.results
     .slice()
@@ -110,7 +116,9 @@ export async function getTrending(opts: {
         overview: row.overview ?? '',
         release_date: mt === 'movie' ? (row.release_date ?? undefined) : undefined,
         first_air_date: mt === 'tv' ? (row.first_air_date ?? undefined) : undefined,
+        origin_country: mt === 'tv' ? (row.origin_country ?? undefined) : undefined,
+        original_language: mt === 'tv' ? (row.original_language ?? undefined) : undefined,
       } satisfies Content;
     })
-    .slice(0, 10);
+    .slice(0, limit);
 }
